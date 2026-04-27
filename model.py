@@ -6,12 +6,30 @@ from typing import List, Optional
 
 from matplotlib import category
 from numpy import require
-from sqlalchemy import JSON, TIMESTAMP, Enum, ForeignKey, String, Integer, DateTime, Boolean, Time, func, Text, null, text,UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from sqlalchemy import JSON, TIMESTAMP, Enum, ForeignKey, String, Integer, DateTime, Boolean, Time, func, Text, null, text, UniqueConstraint, TypeDecorator, Uuid
+# from sqlalchemy.dialects.postgresql import UUID, ARRAY
+
+class UUID(TypeDecorator):
+    """Platform-independent UUID type.
+    Uses PostgreSQL's UUID type, otherwise uses CHAR(32), storing as string without dashes.
+    """
+    impl = Uuid
+    cache_ok = True
+
+class ARRAY(TypeDecorator):
+    """Platform-independent ARRAY type using JSON for SQLite."""
+    impl = JSON
+    cache_ok = True
+    def __init__(self, item_type=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from db.db import Base
+# from db.db import Base
+from sqlalchemy.orm import DeclarativeBase
+class Base(DeclarativeBase):
+    pass
 from sqlalchemy import Float
-from sqlalchemy.dialects.postgresql import JSONB
+# from sqlalchemy.dialects.postgresql import JSONB
+JSONB = JSON # Fallback for SQLite
 
 
 # class User(Base):
@@ -62,6 +80,7 @@ class User(Base):
     pincode: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
     active : Mapped[bool] = mapped_column(Boolean,server_default=text('TRUE'))
+    isUnsubscribed : Mapped[bool] = mapped_column(Boolean, server_default=text('FALSE'), default=False)
 
     lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     lng: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -934,7 +953,7 @@ class FamilyRequests(Base):
     userId : Mapped[uuid.UUID] = mapped_column(ForeignKey("User.id", use_alter=True, name="fk_familyrequest_user"), nullable=True)
     familyId : Mapped[uuid.UUID] = mapped_column(ForeignKey("Family.id", use_alter=True, name="fk_familyrequest_family"), nullable=True)
     createdAt = mapped_column(TIMESTAMP, server_default=func.now())
-    expiresAt = mapped_column(TIMESTAMP, server_default=func.now() + timedelta(days=1))
+    expiresAt = mapped_column(TIMESTAMP, default=lambda: datetime.utcnow() + timedelta(days=1))
     status : Mapped[str] = mapped_column(String, nullable=True)
     user : Mapped["User"] = relationship("User", back_populates="family_requests", foreign_keys=[userId],lazy="selectin")
     
@@ -982,12 +1001,15 @@ class Appointment(Base):
         
     id : Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, index=True,default=uuid.uuid4)		
     doctor_id : Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('User.id'), nullable=True)
+    doctor_name : Mapped[str] = mapped_column(String, nullable=True) # Legacy support
 
-    HealthDataID: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('HealthData.id'))
+    HealthDataID: Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('HealthData.id'), nullable=True) # Made nullable for simple bookings
 
     timing_id :Mapped[UUID] = mapped_column(UUID(as_uuid=True), ForeignKey('TimeSlots.id'), nullable=True)	
             
-    appointment_date : Mapped[datetime] = mapped_column(DateTime, nullable=False)		
+    appointment_date : Mapped[datetime] = mapped_column(DateTime, nullable=True)		
+    appointment_time : Mapped[datetime] = mapped_column(DateTime, nullable=True) # Legacy support
+    user_id : Mapped[str] = mapped_column(String, nullable=True) # Legacy support
             
     status :Mapped[str] = mapped_column(String, default="Scheduled", nullable=False)		
             
@@ -1904,3 +1926,15 @@ class BreastFeedingRecord(Base):
     feedingTime : Mapped[datetime] = mapped_column(DateTime, nullable=False)
     side : Mapped[Optional[str]] = mapped_column(String, nullable=False)
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())    
+
+class RAGKnowledge(Base):
+    __tablename__ = "rag_knowledge"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    report_title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    category: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    health_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    wellness_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    raw_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())

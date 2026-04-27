@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic
+python-jose[cryptography]
+sqlalchemy
+numpy
+matplotlib
+python-dotenv
+google-generativeai
+pdfplumber
+sendgrid
+pymupdf
+tensorflow
